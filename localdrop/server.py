@@ -5,17 +5,24 @@ from __future__ import annotations
 import html
 import mimetypes
 import os
+import re
+from email import policy
+from email.parser import BytesParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, urlparse
 
 HOST = os.environ.get("LOCALDROP_HOST", "0.0.0.0")
 PORT = int(os.environ.get("LOCALDROP_PORT", "8000"))
-SHARE_DIR = (
-    Path(__file__).resolve().parent.parent / "ShareFiles"
-).resolve()
+SHARE_DIR = Path(
+    os.environ.get(
+        "LOCALDROP_SHARE_DIR",
+        str(Path(__file__).resolve().parent.parent / "ShareFiles"),
+    )
+).expanduser().resolve()
 
 TEMPLATE_PATH = Path(__file__).parent / "templates" / "index.html"
+MAX_UPLOAD_BYTES = 100 * 1024 * 1024  # 100 MiB per request
 
 # Only these types may be previewed inline. Other types download as attachments.
 PREVIEW_TYPES = {
@@ -87,10 +94,51 @@ def build_file_rows() -> tuple[int, str]:
     return len(files), content
 
 
+def unique_destination(filename: str) -> Path:
+    """Return a safe destination path without overwriting an existing file."""
+    # Remove any path components supplied by the client and normalize the name.
+    name = Path(filename.replace("\\", "/")).name.strip()
+    name = re.sub(r'[\x00-\x1f<>:"/\\\\|?*]', "_", name).strip(" .")
+    if not name or name in {".", ".."}:
+        name = "uploaded-file"
+
+    destination = SHARE_DIR / name
+    if not destination.exists():
+        return destination
+
+    stem, suffix = Path(name).stem, Path(name).suffix
+    counter = 1
+    while True:
+        candidate = SHARE_DIR / f"{stem} ({counter}){suffix}"
+        if not candidate.exists():
+            return candidate
+        counter += 1
+
+
+def parse_uploaded_files(content_type: str, body: bytes) -> list[tuple[str, bytes]]:
+    """Parse multipart form data using Python's standard-library email parser."""
+    message_bytes = (
+        f"Content-Type: {content_type}\r\nMIME-Version: 1.0\r\n\r\n".encode("ascii")
+        + body
+    )
+    message = BytesParser(policy=policy.default).parsebytes(message_bytes)
+    if not message.is_multipart():
+        raise ValueError("Expected a multipart file upload.")
+
+    uploaded: list[tuple[str, bytes]] = []
+    for part in message.iter_parts():
+        filename = part.get_filename()
+        if not filename:
+            continue
+        payload = part.get_payload(decode=True) or b""
+        uploaded.append((filename, payload))
+    return uploaded
+
+
 class LocalDropHandler(BaseHTTPRequestHandler):
     """Handle the file list, previews, and downloads."""
 
-    server_version = "LocalDrop/1.0"
+    server_version = "LocalDrop/1.1"
 
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
@@ -103,6 +151,64 @@ class LocalDropHandler(BaseHTTPRequestHandler):
         else:
             self.send_error(404, "Not found")
 
+    def do_POST(self) -> None:
+        parsed = urlparse(self.path)
+        if parsed.path != "/upload":
+            self.send_error(404, "Not found")
+            return
+
+        content_length = self.headers.get("Content-Length")
+        if not content_length:
+            self.send_error(411, "Content-Length is required")
+            return
+        try:
+            length = int(content_length)
+        except ValueError:
+            self.send_error(400, "Invalid Content-Length")
+            return
+        if length <= 0:
+            self.send_error(400, "No upload data received")
+            return
+        if length > MAX_UPLOAD_BYTES + 1024 * 1024:
+            self.send_error(413, "Upload is too large. The limit is 100 MiB per request.")
+            return
+
+        content_type = self.headers.get("Content-Type", "")
+        if not content_type.lower().startswith("multipart/form-data"):
+            self.send_error(400, "Expected a multipart file upload")
+            return
+
+        body = self.rfile.read(length)
+        try:
+            uploads = parse_uploaded_files(content_type, body)
+        except (ValueError, UnicodeError):
+            self.send_error(400, "Could not parse uploaded files")
+            return
+
+        if not uploads:
+            self.send_error(400, "Choose at least one file to upload")
+            return
+
+        saved_count = 0
+        try:
+            for filename, data in uploads:
+                if not filename:
+                    continue
+                destination = unique_destination(filename)
+                # Write to the destination without replacing existing files.
+                with destination.open("xb") as file_handle:
+                    file_handle.write(data)
+                saved_count += 1
+        except OSError:
+            self.send_error(500, "Could not save the uploaded file")
+            return
+
+        message = f"Uploaded {saved_count} file(s) successfully."
+        self.send_response(303)
+        self.send_header("Location", "/?message=" + quote(message))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+
     def serve_index(self) -> None:
         count, file_rows = build_file_rows()
         try:
@@ -111,7 +217,13 @@ class LocalDropHandler(BaseHTTPRequestHandler):
             self.send_error(500, "The LocalDrop HTML template could not be read.")
             return
 
-        page = template.replace("{{COUNT}}", str(count)).replace("{{FILES}}", file_rows)
+        message = parse_qs(urlparse(self.path).query).get("message", [""])[0]
+        safe_message = html.escape(message)
+        page = (
+            template.replace("{{COUNT}}", str(count))
+            .replace("{{FILES}}", file_rows)
+            .replace("{{MESSAGE}}", safe_message)
+        )
         body = page.encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")

@@ -7,6 +7,7 @@ LocalDrop is a small, dependency-free file-sharing website for your local networ
 - Responsive interface with file search.
 - Preview support for common images, PDFs, text files, and media formats.
 - Other file types are offered as downloads.
+- Upload files from a phone or another device into the host computer's `ShareFiles` folder.
 - Shared files are restricted to one dedicated folder inside the project by default.
 
 > **Security:** LocalDrop is a simple local-network utility, not a hardened internet-facing file server. Anyone who can reach the server may be able to access files in the shared folder. Do not put sensitive files there, do not expose the server directly to the public internet, and stop it when finished.
@@ -49,7 +50,7 @@ The server creates the `ShareFiles` folder inside the project if it does not alr
 
 ### 3. Add files
 
-Copy files you want to transfer into the project's `ShareFiles` folder. You can also create subfolders. Refresh the LocalDrop page after adding files.
+Copy files you want to share into the project's `ShareFiles` folder, or use the **Add files to LocalDrop** form on the website to upload files from your phone or another device to the computer. You can also create subfolders manually. Refresh the page after adding files.
 
 ```text
 Local-Drop/
@@ -106,6 +107,7 @@ If your phone cannot connect:
 - **View** opens supported file types in the browser where possible.
 - **Download** downloads a file to the device you're using.
 - Use the search field to filter the list.
+- Use **Add files to LocalDrop** to upload one or more files from the device you're currently using to the computer's `ShareFiles` folder. Uploads are limited to 100 MiB per request; existing files are not overwritten (a numbered filename is used instead).
 - Reload the page to refresh the available files.
 - Stop the server by pressing `Ctrl+C` in the terminal.
 
@@ -146,15 +148,16 @@ Environment variables set this way apply to the current PowerShell session. Open
 3. **View** requests a file through `/view`; supported file types are sent inline for browser preview.
 4. **Download** requests a file through `/download`; files are sent as attachments.
 5. File contents are streamed from your computer to the requesting browser over the local network. They are not uploaded to a cloud service.
+6. Uploads use an HTTP `POST` multipart form request and save files into the configured shared directory.
 
 The server validates requested paths to help prevent access outside the configured shared directory. This is useful protection, but it does not replace authentication or a security review.
 
 ## Limitations
 
 - No login or user authentication.
-- Anyone who can reach the server may access files in the shared directory.
+- Anyone who can reach the server may upload files to or access files in the shared directory.
 - Intended for trusted local networks only.
-- No file upload from phone to computer; LocalDrop currently transfers files from the host computer to clients.
+- Uploads are limited to 100 MiB per request. Large batches that exceed this limit must be split into smaller uploads.
 - Transfer speed depends on your network and devices.
 
 ## Project structure
@@ -164,8 +167,7 @@ Local-Drop/
 ├── .gitignore
 ├── LICENSE
 ├── README.md
-├── ShareFiles/
-│   └── .gitkeep
+├── ShareFiles/              # Created automatically when the server starts
 └── localdrop/
     ├── server.py
     └── templates/
