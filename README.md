@@ -115,7 +115,7 @@ If your phone cannot connect:
 
 ## Stop and restart LocalDrop
 
-Click **Stop server** at the bottom of the web page and confirm. This shuts down LocalDrop for all connected devices. If you cannot use the browser, press `Ctrl+C` in the terminal running the server.
+Click **Stop server** at the bottom of the web page and confirm. LocalDrop redirects the browser back to the home page, then shuts down a moment later so refreshing the page will not repeat the stop request. This disconnects all connected devices. If you cannot use the browser, press `Ctrl+C` in the terminal running the server.
 
 To start LocalDrop again, run:
 
