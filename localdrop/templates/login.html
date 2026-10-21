@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#103b2c">
+    <title>Unlock LocalDrop</title>
+    <style>
+        :root {
+            color-scheme: light;
+            --ink: #18231f;
+            --muted: #68756f;
+            --line: #e1e9e4;
+            --green: #176b4d;
+            --danger: #b42318;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            padding: 24px;
+            display: grid;
+            place-items: center;
+            background: #f5f8f6;
+            color: var(--ink);
+            font: 16px/1.5 system-ui, -apple-system, Segoe UI, sans-serif;
+        }
+
+        .login-card {
+            width: min(100%, 400px);
+            padding: 28px;
+            background: white;
+            border: 1px solid var(--line);
+            border-radius: 20px;
+            box-shadow: 0 12px 40px #193d2a12;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 25px;
+        }
+
+        .logo {
+            width: 44px;
+            height: 44px;
+            display: grid;
+            place-items: center;
+            border-radius: 14px;
+            background: #c8f2d8;
+            color: #103b2c;
+            font-weight: 900;
+            font-size: 23px;
+        }
+
+        h1 { margin: 0; font-size: 22px; }
+        .tagline { margin: 3px 0 0; color: var(--muted); font-size: 13px; }
+        h2 { margin: 0 0 7px; font-size: 25px; }
+        .description { color: var(--muted); margin: 0 0 22px; }
+
+        label {
+            display: block;
+            margin-bottom: 7px;
+            font-weight: 650;
+        }
+
+        input {
+            width: 100%;
+            padding: 13px 14px;
+            border: 1px solid #cbd8cf;
+            border-radius: 11px;
+            font: inherit;
+            font-size: 22px;
+            letter-spacing: 0.45em;
+            text-align: center;
+        }
+
+        input:focus {
+            outline: 3px solid #c8f2d8;
+            border-color: var(--green);
+        }
+
+        button {
+            width: 100%;
+            margin-top: 14px;
+            padding: 12px 16px;
+            border: 0;
+            border-radius: 11px;
+            background: var(--green);
+            color: white;
+            font: inherit;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .message {
+            margin: 0 0 16px;
+            padding: 10px 12px;
+            border-radius: 10px;
+            background: #fff1f0;
+            color: var(--danger);
+            font-size: 14px;
+        }
+
+        .footnote {
+            margin: 20px 0 0;
+            color: var(--muted);
+            font-size: 12px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <main class="login-card">
+        <div class="brand">
+            <div class="logo" aria-hidden="true">↗</div>
+            <div>
+                <h1>LocalDrop</h1>
+                <p class="tagline">Private, local-network file sharing</p>
+            </div>
+        </div>
+
+        <h2>Unlock LocalDrop</h2>
+        <p class="description">Enter the four-digit PIN shown in the terminal on the computer running LocalDrop.</p>
+
+        {{MESSAGE}}
+
+        <form action="/login" method="post">
+            <label for="pin">Access PIN</label>
+            <input
+                id="pin"
+                name="pin"
+                type="password"
+                inputmode="numeric"
+                pattern="[0-9]{4}"
+                minlength="4"
+                maxlength="4"
+                autocomplete="off"
+                autofocus
+                required
+            >
+            <button type="submit">Unlock</button>
+        </form>
+
+        <p class="footnote">Local network access only. No internet connection is required.</p>
+    </main>
+</body>
+</html>
