@@ -25,7 +25,7 @@ No `pip install` step is needed; LocalDrop uses Python's standard library.
 Clone the repository:
 
 ```powershell
-git clone https://github.com/YOUR-USERNAME/localdrop.git
+git clone https://github.com/Markandeshwaragoudapatil/Local-Drop.git
 cd localdrop
 ```
 
