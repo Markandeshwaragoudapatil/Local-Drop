@@ -118,7 +118,7 @@ If your phone cannot connect:
 - Click **Stop server** and enter the same four-digit PIN again to stop LocalDrop. The server redirects the browser home before shutting down.
 - Use the search field to filter the list.
 - Use **Add files to LocalDrop** to upload one or more files from the device you're currently using to the computer's `ShareFiles` folder. Uploads are limited to 100 MiB per request; existing files are not overwritten (a numbered filename is used instead).
-- Reload the page to refresh the available files.
+- All open, authenticated LocalDrop pages check for shared-folder changes every 2 seconds and refresh automatically when files are uploaded or deleted from another device. This also notices changes made directly in the shared folder.
 
 ## Stop and restart LocalDrop
 
@@ -169,8 +169,10 @@ Environment variables set this way apply to the current PowerShell session. Open
 5. File contents are streamed from your computer to the requesting browser over the local network. They are not uploaded to a cloud service.
 6. Uploads use an HTTP `POST` multipart form request and save files into the configured shared directory.
 7. The browser submits the PIN once to `/login`. The server validates it and sets a random, HttpOnly session cookie; protected requests validate the session in the background.
+8. Each authenticated page polls `/api/state` every two seconds. The endpoint returns a hash of shared file names, sizes, and modification times, so pages refresh when the shared files change without uploading file contents or adding a third-party service.
 8. **Delete** sends a URL-encoded `POST` request to `/delete`. The server validates that the selected file is inside the shared directory before removing it.
 9. **Stop server** requires a valid browser session and the startup PIN again, then redirects home and shuts down cleanly.
+10. The cross-device refresh is polling-based, so updates usually appear within about two seconds while connected. It does not use a cloud service or require internet access.
 
 The server validates requested paths to help prevent access outside the configured shared directory. All file-related routes require an active server-side session. This is useful protection, but it does not replace HTTPS or a security review.
 
