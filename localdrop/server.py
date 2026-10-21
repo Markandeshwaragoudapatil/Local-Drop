@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import html
 import mimetypes
 import os
@@ -146,13 +147,14 @@ def resolve_shared_file(relative_path: str) -> Path | None:
     return None
 
 
-def build_file_rows() -> tuple[int, str]:
+def build_file_rows() -> tuple[int, str, str]:
     """Build escaped HTML rows for the files currently in the shared directory."""
     files = sorted(
         (path for path in SHARE_DIR.rglob("*") if path.is_file()),
         key=lambda path: str(path.relative_to(SHARE_DIR)).lower(),
     )
     rows: list[str] = []
+    file_metadata: list[tuple[str, int, int]] = []
 
     image_types = {
         ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg", ".heic", ".avif",
@@ -210,7 +212,17 @@ def build_file_rows() -> tuple[int, str]:
     }
 
     for path in files:
+        try:
+            stat_result = path.stat()
+        except OSError:
+            # A file might be deleted while the list is being built.
+            continue
+
+        if not path.is_file():
+            continue
+
         relative = path.relative_to(SHARE_DIR).as_posix()
+        file_metadata.append((relative, stat_result.st_size, stat_result.st_mtime_ns))
         escaped_name = html.escape(relative)
         search_name = html.escape(relative.lower(), quote=True)
         encoded_path = quote(relative, safe="")
@@ -233,7 +245,7 @@ def build_file_rows() -> tuple[int, str]:
             f'<article class="file" data-name="{search_name}">'
             f'<div class="fileicon fileicon-{icon_type}" aria-hidden="true">{icon_svg}</div>'
             f'<div class="meta"><div class="name">{escaped_name}</div>'
-            f'<div class="sub">{human_size(path.stat().st_size)}</div></div>'
+            f'<div class="sub">{human_size(stat_result.st_size)}</div></div>'
             f'<div class="actions">'
             f'<a class="btn" href="/view?file={encoded_path}" target="_blank" rel="noopener">View</a>'
             f'<a class="btn primary" href="/download?file={encoded_path}">Download</a>'
@@ -252,7 +264,33 @@ def build_file_rows() -> tuple[int, str]:
         )
     else:
         content = "\n".join(rows)
-    return len(files), content
+    version = hash_file_metadata(file_metadata)
+    return len(rows), content, version
+
+
+def hash_file_metadata(file_metadata: list[tuple[str, int, int]]) -> str:
+    """Return a stable version token for the names, sizes, and modification times."""
+    records = sorted(file_metadata, key=lambda item: item[0].lower())
+    payload = "\\n".join(
+        f"{relative_path}\\0{size}\\0{modified_ns}"
+        for relative_path, size, modified_ns in records
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def current_files_version() -> str:
+    """Compute the current shared-folder state without reading any file contents."""
+    file_metadata: list[tuple[str, int, int]] = []
+    for path in SHARE_DIR.rglob("*"):
+        try:
+            if not path.is_file():
+                continue
+            stat_result = path.stat()
+            relative = path.relative_to(SHARE_DIR).as_posix()
+        except OSError:
+            continue
+        file_metadata.append((relative, stat_result.st_size, stat_result.st_mtime_ns))
+    return hash_file_metadata(file_metadata)
 
 
 def unique_destination(filename: str) -> Path:
@@ -316,7 +354,9 @@ class LocalDropHandler(BaseHTTPRequestHandler):
             return
 
 
-        if parsed.path in ("/", "/index.html"):
+        if parsed.path == "/api/state":
+            self.serve_files_state()
+        elif parsed.path in ("/", "/index.html"):
             self.serve_index()
         elif parsed.path in ("/view", "/download"):
             self.serve_file(query.get("file", [""])[0], parsed.path == "/view")
@@ -556,8 +596,19 @@ class LocalDropHandler(BaseHTTPRequestHandler):
         shutdown_timer.daemon = True
         shutdown_timer.start()
 
+    def serve_files_state(self) -> None:
+        """Return a compact token that authenticated browsers use to detect changes."""
+        version = current_files_version().encode("ascii")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Length", str(len(version)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.end_headers()
+        self.wfile.write(version)
+
     def serve_index(self) -> None:
-        count, file_rows = build_file_rows()
+        count, file_rows, files_version = build_file_rows()
         try:
             template = TEMPLATE_PATH.read_text(encoding="utf-8")
         except OSError:
@@ -569,6 +620,7 @@ class LocalDropHandler(BaseHTTPRequestHandler):
         page = (
             template.replace("{{COUNT}}", str(count))
             .replace("{{FILES}}", file_rows)
+            .replace("{{FILES_VERSION}}", files_version)
             .replace(
                 "{{MESSAGE}}",
                 f'<div class="message" role="status">{safe_message}</div>' if safe_message else "",
