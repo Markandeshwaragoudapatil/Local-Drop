@@ -1,6 +1,6 @@
 # LocalDrop
 
-LocalDrop is a small, dependency-free file-sharing website for your local network. Run it on your computer, connect your phone or another device to the same local network (through a Wi-Fi router or a mobile hotspot), then preview, upload, download, and manage files in a browser. LocalDrop does not require internet access or an active mobile-data plan; the devices only need local network connectivity.
+LocalDrop is a small, dependency-free, PIN-protected file-sharing website for your local network. Run it on your computer, enter the startup PIN on your phone or another device, then preview, upload, download, and manage files in a browser. Devices can connect through a Wi-Fi router or mobile hotspot. Internet access and an active mobile-data plan are not required; local network connectivity is enough.
 
 - No cloud upload: files are served directly from your computer.
 - No third-party Python packages required.
@@ -12,7 +12,7 @@ LocalDrop is a small, dependency-free file-sharing website for your local networ
 - Stop the server from the browser using the **Stop server** button.
 - Shared files are restricted to one dedicated folder inside the project by default.
 
-> **Security:** LocalDrop has no login or user authentication. Anyone who can reach the server may upload, download, delete shared files, or stop the server. Use it only on a trusted local network. Do not share sensitive files or expose the server directly to the public internet.
+> **Security:** LocalDrop uses a random four-digit startup PIN and in-memory browser sessions to deter casual access. Five incorrect PIN attempts from the same client IP trigger a 60-second cooldown. The PIN is required again to stop the server. However, LocalDrop uses plain HTTP, not HTTPS, so traffic on the local network is not encrypted and the PIN/session cookie could be observed by someone monitoring that network. Use it only on a trusted local network and do not expose it to the public internet.
 
 ## Requirements
 
@@ -48,7 +48,7 @@ On some Windows installations, use:
 py localdrop/server.py
 ```
 
-The server creates the `ShareFiles` folder inside the project if it does not already exist.
+The server creates the `ShareFiles` folder inside the project if it does not already exist. Each time it starts, it prints a new random four-digit **Access PIN** in the terminal. Keep the terminal open long enough to read the PIN; you'll need it to sign in from a browser. The PIN changes after every restart.
 
 ### 3. Add files
 
@@ -79,6 +79,8 @@ Visit:
 ```text
 http://localhost:8000
 ```
+
+Enter the four-digit **Access PIN** displayed in the terminal. The page does not show the file list until you sign in. After a successful login, the browser receives a session cookie and can use the site without entering the PIN again for each file. Sessions are stored only in memory and become invalid after a server restart; they expire after 12 hours.
 
 ### 5. Open LocalDrop on your phone
 
@@ -111,6 +113,8 @@ If your phone cannot connect:
 - **View** opens supported file types in the browser where possible.
 - **Download** downloads the file to the device you are using.
 - **Delete** permanently removes the selected file from the shared folder after confirmation.
+- The PIN is required once per browser session; normal file preview, upload, download, and deletion do not ask for it repeatedly.
+- Click **Stop server** and enter the same four-digit PIN again to stop LocalDrop. The server redirects the browser home before shutting down.
 - Use the search field to filter the list.
 - Use **Add files to LocalDrop** to upload one or more files from the device you're currently using to the computer's `ShareFiles` folder. Uploads are limited to 100 MiB per request; existing files are not overwritten (a numbered filename is used instead).
 - Reload the page to refresh the available files.
@@ -163,15 +167,17 @@ Environment variables set this way apply to the current PowerShell session. Open
 4. **Download** requests a file through `/download`; files are sent as attachments.
 5. File contents are streamed from your computer to the requesting browser over the local network. They are not uploaded to a cloud service.
 6. Uploads use an HTTP `POST` multipart form request and save files into the configured shared directory.
-7. **Delete** sends a URL-encoded `POST` request to `/delete`. The server validates that the selected file is inside the shared directory before removing it.
-8. **Stop server** sends a confirmed `POST` request to `/shutdown`; the server replies and then shuts down cleanly.
+7. The browser submits the PIN once to `/login`. The server validates it and sets a random, HttpOnly session cookie; protected requests validate the session in the background.
+8. **Delete** sends a URL-encoded `POST` request to `/delete`. The server validates that the selected file is inside the shared directory before removing it.
+9. **Stop server** requires a valid browser session and the startup PIN again, then redirects home and shuts down cleanly.
 
-The server validates requested paths to help prevent access outside the configured shared directory. This is useful protection, but it does not replace authentication or a security review.
+The server validates requested paths to help prevent access outside the configured shared directory. All file-related routes require an active server-side session. This is useful protection, but it does not replace HTTPS or a security review.
 
 ## Limitations
 
-- No login or user authentication.
-- Anyone who can reach the server may upload files to, download files from, delete files in, or stop the server.
+- The four-digit PIN is basic protection against casual access, not strong authentication.
+- HTTP traffic is unencrypted; do not use LocalDrop on an untrusted network.
+- Anyone who has authenticated may upload, download, or delete files. Shutting down also requires re-entering the startup PIN.
 - Intended for trusted local networks only.
 - Uploads are limited to 100 MiB per request. Large batches that exceed this limit must be split into smaller uploads.
 - Transfer speed depends on your network and devices.
