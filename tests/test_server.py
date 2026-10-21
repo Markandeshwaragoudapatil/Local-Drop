@@ -201,6 +201,9 @@ class LocalDropHTTPTests(unittest.TestCase):
         self.assertEqual((self.share_dir / "report.txt").read_bytes(), b"first")
         self.assertEqual((self.share_dir / "report (1).txt").read_bytes(), b"second")
 
+    def test_configured_upload_limit_is_exactly_100_mib(self) -> None:
+        self.assertEqual(localdrop_server.MAX_UPLOAD_BYTES, 100 * 1024 * 1024)
+
     def test_upload_payload_over_100_mib_limit_is_rejected(self) -> None:
         self.login()
         # Use a small test limit to verify the real byte-count check without allocating 100 MiB.
