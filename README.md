@@ -2,6 +2,8 @@
 
 LocalDrop is a small, dependency-free, PIN-protected file-sharing website for your local network. Run it on your computer, enter the startup PIN on your phone or another device, then preview, upload, download, and manage files in a browser. Devices can connect through a Wi-Fi router or mobile hotspot. Internet access and an active mobile-data plan are not required; local network connectivity is enough.
 
+> **Authentication:** LocalDrop is not an anonymous/open-access server. Each start generates a new four-digit PIN shown in the terminal. A browser must submit it to create a server-side session before accessing files. Sessions expire after 12 hours or when the server restarts; five incorrect PIN attempts from one client IP trigger a 60-second cooldown. Stopping the server requires the PIN again. The PIN and session cookie travel over plain HTTP, so use LocalDrop only on a trusted local network.
+
 
 ## 📸 Screenshots
 
@@ -212,10 +214,25 @@ The server validates requested paths to help prevent access outside the configur
 - Uploads are limited to 100 MiB per request. Large batches that exceed this limit must be split into smaller uploads.
 - Transfer speed depends on your network and devices.
 
+## Running tests
+
+Run the automated integration tests from the repository root:
+
+```powershell
+python -m unittest discover -s tests -v
+```
+
+The tests use a temporary shared folder and an ephemeral local port, so they do not change your real `ShareFiles` contents. They cover PIN authentication and cooldown, path traversal, filename collisions, the 100 MiB upload limit, deletion, shutdown confirmation, and concurrent clients. No third-party test packages are required.
+
 ## Project structure
 
 ```text
 Local-Drop/
+├── .github/
+│   └── workflows/
+│       └── tests.yml
+├── tests/
+│   └── test_server.py
 ├── .gitignore
 ├── LICENSE
 ├── README.md
