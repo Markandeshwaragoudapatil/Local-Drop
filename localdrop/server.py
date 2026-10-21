@@ -271,7 +271,7 @@ class LocalDropHandler(BaseHTTPRequestHandler):
         self.redirect_with_message(f"Deleted {file_path.name}.")
 
     def handle_shutdown(self) -> None:
-        """Reply to the browser before gracefully stopping the server."""
+        """Redirect the browser home, then stop the server after a short delay."""
         form = self.read_form_body()
         if form is None:
             return
@@ -279,44 +279,15 @@ class LocalDropHandler(BaseHTTPRequestHandler):
             self.send_error(400, "Shutdown was not confirmed")
             return
 
-        body = b"""<!doctype html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>LocalDrop is stopping</title>
-    <style>
-        body { font: 16px/1.5 system-ui, sans-serif; background: #f5f8f6; color: #18231f; max-width: 620px; margin: 12vh auto; padding: 24px; }
-        main { background: white; border: 1px solid #e1e9e4; border-radius: 16px; padding: 24px; }
-        h1 { margin-top: 0; }
-    </style>
-</head>
-<body>
-    <main>
-        <h1>LocalDrop is stopping</h1>
-        <p>The server is shutting down. Other devices will no longer be able to access this page.</p>
-        <p>To start it again, run <code>python localdrop/server.py</code> on the computer.</p>
-    </main>
-</body>
-</html>"""
-        self.send_response(200)
-        self.send_header("Content-Type", "text/html; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
-        self.send_header("Connection", "close")
-        self.close_connection = True
-        self.end_headers()
-        try:
-            self.wfile.write(body)
-        except (BrokenPipeError, ConnectionResetError):
-            pass
+        # Use Post/Redirect/Get so refreshing the browser never repeats shutdown.
+        self.redirect_with_message(
+            "LocalDrop is stopping. This device will disconnect shortly."
+        )
 
-        # shutdown() must run outside the serve_forever() thread.
-        threading.Thread(
-            target=self.server.shutdown,
-            name="LocalDrop-shutdown",
-            daemon=True,
-        ).start()
+        # Give the browser time to follow the redirect back to "/" before stopping.
+        shutdown_timer = threading.Timer(2.0, self.server.shutdown)
+        shutdown_timer.daemon = True
+        shutdown_timer.start()
 
     def serve_index(self) -> None:
         count, file_rows = build_file_rows()
