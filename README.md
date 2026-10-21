@@ -8,9 +8,11 @@ LocalDrop is a small, dependency-free file-sharing website for your local networ
 - Preview support for common images, PDFs, text files, and media formats.
 - Other file types are offered as downloads.
 - Upload files from a phone or another device into the host computer's `ShareFiles` folder.
+- Delete individual shared files from the browser after confirmation.
+- Stop the server from the browser using the **Stop server** button.
 - Shared files are restricted to one dedicated folder inside the project by default.
 
-> **Security:** LocalDrop is a simple local-network utility, not a hardened internet-facing file server. Anyone who can reach the server may be able to access files in the shared folder. Do not put sensitive files there, do not expose the server directly to the public internet, and stop it when finished.
+> **Security:** LocalDrop has no login or user authentication. Anyone who can reach the server may upload, download, delete shared files, or stop the server. Use it only on a trusted local network. Do not share sensitive files or expose the server directly to the public internet.
 
 ## Requirements
 
@@ -68,7 +70,7 @@ Local-Drop/
 └── README.md
 ```
 
-**Important:** `.gitignore` is configured to ignore files placed in `ShareFiles/`, while keeping the `.gitkeep` placeholder tracked. Your shared documents, photos, and other personal files should not be committed to Git.
+**Important:** `.gitignore` should ignore files placed in `ShareFiles/`. Your shared documents, photos, and other personal files should not be committed to Git.
 
 ### 4. Open LocalDrop on your computer
 
@@ -105,11 +107,21 @@ If your phone cannot connect:
 ## Using LocalDrop
 
 - **View** opens supported file types in the browser where possible.
-- **Download** downloads a file to the device you're using.
+- **Download** downloads the file to the device you are using.
+- **Delete** permanently removes the selected file from the shared folder after confirmation.
 - Use the search field to filter the list.
 - Use **Add files to LocalDrop** to upload one or more files from the device you're currently using to the computer's `ShareFiles` folder. Uploads are limited to 100 MiB per request; existing files are not overwritten (a numbered filename is used instead).
 - Reload the page to refresh the available files.
-- Stop the server by pressing `Ctrl+C` in the terminal.
+
+## Stop and restart LocalDrop
+
+Click **Stop server** at the bottom of the web page and confirm. This shuts down LocalDrop for all connected devices. If you cannot use the browser, press `Ctrl+C` in the terminal running the server.
+
+To start LocalDrop again, run:
+
+```powershell
+python localdrop/server.py
+```
 
 Whether a file can be previewed depends on browser support. PDFs and images often open directly; formats such as DOCX generally download instead.
 
@@ -149,13 +161,15 @@ Environment variables set this way apply to the current PowerShell session. Open
 4. **Download** requests a file through `/download`; files are sent as attachments.
 5. File contents are streamed from your computer to the requesting browser over the local network. They are not uploaded to a cloud service.
 6. Uploads use an HTTP `POST` multipart form request and save files into the configured shared directory.
+7. **Delete** sends a URL-encoded `POST` request to `/delete`. The server validates that the selected file is inside the shared directory before removing it.
+8. **Stop server** sends a confirmed `POST` request to `/shutdown`; the server replies and then shuts down cleanly.
 
 The server validates requested paths to help prevent access outside the configured shared directory. This is useful protection, but it does not replace authentication or a security review.
 
 ## Limitations
 
 - No login or user authentication.
-- Anyone who can reach the server may upload files to or access files in the shared directory.
+- Anyone who can reach the server may upload files to, download files from, delete files in, or stop the server.
 - Intended for trusted local networks only.
 - Uploads are limited to 100 MiB per request. Large batches that exceed this limit must be split into smaller uploads.
 - Transfer speed depends on your network and devices.
