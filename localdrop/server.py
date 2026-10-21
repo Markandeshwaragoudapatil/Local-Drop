@@ -83,7 +83,7 @@ def build_file_rows() -> tuple[int, str]:
             f'<a class="btn" href="/view?file={encoded_path}" target="_blank" rel="noopener">View</a>'
             f'<a class="btn primary" href="/download?file={encoded_path}">Download</a>'
             f'<form class="inline-form" action="/delete" method="post" '
-            f'onsubmit="return confirm(\'Permanently delete {html.escape(relative, quote=True)}?\')">'
+            f'onsubmit="return confirm(\'Permanently delete this file?\')">'
             f'<input type="hidden" name="file" value="{html.escape(relative, quote=True)}">'
             f'<button class="btn danger" type="submit">Delete</button>'
             f'</form>'
