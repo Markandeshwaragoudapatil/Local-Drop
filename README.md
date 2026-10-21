@@ -2,6 +2,30 @@
 
 LocalDrop is a small, dependency-free, PIN-protected file-sharing website for your local network. Run it on your computer, enter the startup PIN on your phone or another device, then preview, upload, download, and manage files in a browser. Devices can connect through a Wi-Fi router or mobile hotspot. Internet access and an active mobile-data plan are not required; local network connectivity is enough.
 
+
+## 📸 Screenshots
+
+See LocalDrop in action!
+
+<p align="center">
+  <a href="screenshots/01-login.png">
+    <img src="screenshots/01-login.png" width="30%" alt="LocalDrop PIN login screen">
+  </a>
+  <a href="screenshots/02-file-sharing.png">
+    <img src="screenshots/02-file-sharing.png" width="30%" alt="LocalDrop file sharing interface">
+  </a>
+  <a href="screenshots/03-mobile-view.png">
+    <img src="screenshots/03-mobile-view.png" width="30%" alt="LocalDrop on mobile">
+  </a>
+</p>
+
+<p align="center">
+  <sub>🔐 Secure Login</sub> &nbsp; · &nbsp;
+  <sub>📁 File Sharing</sub> &nbsp; · &nbsp;
+  <sub>📱 Mobile Access</sub>
+</p>
+
+
 - No cloud upload: files are served directly from your computer.
 - No third-party Python packages required.
 - Responsive interface with file search.

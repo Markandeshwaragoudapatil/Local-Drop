@@ -27,7 +27,7 @@ SHARE_DIR = Path(
 ).expanduser().resolve()
 
 TEMPLATE_PATH = Path(__file__).parent / "templates" / "index.html"
-MAX_UPLOAD_BYTES = 100 * 1024 * 1024  # 100 MiB per request
+MAX_UPLOAD_BYTES = 100 * 1024 * 1024 * 1024  # 100 GiB per request
 
 # PIN/session state is held in memory and resets whenever LocalDrop restarts.
 SERVER_PIN = f"{secrets.randbelow(10_000):04d}"
