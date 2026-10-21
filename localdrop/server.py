@@ -11,9 +11,9 @@ from urllib.parse import parse_qs, quote, urlparse
 
 HOST = os.environ.get("LOCALDROP_HOST", "0.0.0.0")
 PORT = int(os.environ.get("LOCALDROP_PORT", "8000"))
-SHARE_DIR = Path(
-    os.environ.get("LOCALDROP_SHARE_DIR", str(Path.home() / "ShareFiles"))
-).expanduser().resolve()
+SHARE_DIR = (
+    Path(__file__).resolve().parent.parent / "ShareFiles"
+).resolve()
 
 TEMPLATE_PATH = Path(__file__).parent / "templates" / "index.html"
 
