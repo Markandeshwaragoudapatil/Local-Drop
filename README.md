@@ -7,29 +7,27 @@ LocalDrop is a small, dependency-free, PIN-protected file-sharing website for yo
 
 See LocalDrop in action!
 
-<p align="center">
-  <a href="screenshots/01-login.png">
-    <img src="screenshots/01-login.png" width="50%" alt="LocalDrop PIN login screen">
-  </a>
-  <a href="screenshots/02-file-sharing.png">
-    <img src="screenshots/02-file-sharing.png" width="50%" alt="LocalDrop file sharing interface">
-  </a>
-</p>
-
-<p align="center">
-  <sub>🔐 Secure Login</sub> &nbsp; · &nbsp;
-  <sub>📁 File Sharing</sub>
-</p>
-
-<p align="center">
-  <a href="screenshots/03-mobile-view.png">
-    <img src="screenshots/03-mobile-view.png" width="100%" alt="LocalDrop on mobile">
-  </a>
-</p>
-<p align="center">
-  <sub>📱 Mobile Access</sub>
-</p>
-
+<table>
+  <tr>
+    <td width="60%" align="center" valign="top">
+      <a href="screenshots/01-login.png">
+        <img src="screenshots/01-login.png" width="100%" alt="LocalDrop PIN login screen">
+      </a>
+      <p><strong>🔐 Secure Login</strong></p>
+      <br>
+      <a href="screenshots/02-file-sharing.png">
+        <img src="screenshots/02-file-sharing.png" width="100%" alt="LocalDrop file sharing interface">
+      </a>
+      <p><strong>📁 File Sharing</strong></p>
+    </td>
+    <td width="40%" align="center" valign="middle">
+      <a href="screenshots/03-mobile-view.png">
+        <img src="screenshots/03-mobile-view.png" width="80%" alt="LocalDrop on mobile">
+      </a>
+      <p><strong>📱 Mobile Access</strong></p>
+    </td>
+  </tr>
+</table>
 
 - No cloud upload: files are served directly from your computer.
 - No third-party Python packages required.
