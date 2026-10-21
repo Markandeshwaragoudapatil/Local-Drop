@@ -6,6 +6,7 @@ import html
 import mimetypes
 import os
 import re
+import threading
 from email import policy
 from email.parser import BytesParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -81,6 +82,11 @@ def build_file_rows() -> tuple[int, str]:
             f'<div class="actions">'
             f'<a class="btn" href="/view?file={encoded_path}" target="_blank" rel="noopener">View</a>'
             f'<a class="btn primary" href="/download?file={encoded_path}">Download</a>'
+            f'<form class="inline-form" action="/delete" method="post" '
+            f'onsubmit="return confirm(\'Permanently delete {html.escape(relative, quote=True)}?\')">'
+            f'<input type="hidden" name="file" value="{html.escape(relative, quote=True)}">'
+            f'<button class="btn danger" type="submit">Delete</button>'
+            f'</form>'
             f"</div></article>"
         )
 
@@ -138,7 +144,7 @@ def parse_uploaded_files(content_type: str, body: bytes) -> list[tuple[str, byte
 class LocalDropHandler(BaseHTTPRequestHandler):
     """Handle the file list, previews, and downloads."""
 
-    server_version = "LocalDrop/1.1"
+    server_version = "LocalDrop/1.2"
 
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
@@ -153,10 +159,49 @@ class LocalDropHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
-        if parsed.path != "/upload":
+        if parsed.path == "/upload":
+            self.handle_upload()
+        elif parsed.path == "/delete":
+            self.handle_delete()
+        elif parsed.path == "/shutdown":
+            self.handle_shutdown()
+        else:
             self.send_error(404, "Not found")
-            return
 
+    def read_form_body(self, max_bytes: int = 16 * 1024) -> dict[str, list[str]] | None:
+        """Read a bounded URL-encoded form body."""
+        content_length = self.headers.get("Content-Length")
+        if not content_length:
+            self.send_error(411, "Content-Length is required")
+            return None
+        try:
+            length = int(content_length)
+        except ValueError:
+            self.send_error(400, "Invalid Content-Length")
+            return None
+        if length < 0 or length > max_bytes:
+            self.send_error(413, "Form data is too large")
+            return None
+        if not self.headers.get("Content-Type", "").lower().startswith(
+            "application/x-www-form-urlencoded"
+        ):
+            self.send_error(400, "Expected URL-encoded form data")
+            return None
+        try:
+            body = self.rfile.read(length).decode("utf-8")
+        except UnicodeDecodeError:
+            self.send_error(400, "Form data must be UTF-8")
+            return None
+        return parse_qs(body, keep_blank_values=True)
+
+    def redirect_with_message(self, message: str) -> None:
+        """Return the browser to the home page with a short status message."""
+        self.send_response(303)
+        self.send_header("Location", "/?message=" + quote(message))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+
+    def handle_upload(self) -> None:
         content_length = self.headers.get("Content-Length")
         if not content_length:
             self.send_error(411, "Content-Length is required")
@@ -203,11 +248,75 @@ class LocalDropHandler(BaseHTTPRequestHandler):
             self.send_error(500, "Could not save the uploaded file")
             return
 
-        message = f"Uploaded {saved_count} file(s) successfully."
-        self.send_response(303)
-        self.send_header("Location", "/?message=" + quote(message))
+        self.redirect_with_message(f"Uploaded {saved_count} file(s) successfully.")
+
+    def handle_delete(self) -> None:
+        """Delete only a file that resolves inside the configured shared folder."""
+        form = self.read_form_body()
+        if form is None:
+            return
+
+        relative_path = form.get("file", [""])[0]
+        file_path = resolve_shared_file(relative_path)
+        if file_path is None:
+            self.redirect_with_message("File not found; nothing was deleted.")
+            return
+
+        try:
+            file_path.unlink()
+        except OSError:
+            self.send_error(500, "Could not delete the selected file")
+            return
+
+        self.redirect_with_message(f"Deleted {file_path.name}.")
+
+    def handle_shutdown(self) -> None:
+        """Reply to the browser before gracefully stopping the server."""
+        form = self.read_form_body()
+        if form is None:
+            return
+        if form.get("confirm", [""])[0] != "yes":
+            self.send_error(400, "Shutdown was not confirmed")
+            return
+
+        body = b"""<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>LocalDrop is stopping</title>
+    <style>
+        body { font: 16px/1.5 system-ui, sans-serif; background: #f5f8f6; color: #18231f; max-width: 620px; margin: 12vh auto; padding: 24px; }
+        main { background: white; border: 1px solid #e1e9e4; border-radius: 16px; padding: 24px; }
+        h1 { margin-top: 0; }
+    </style>
+</head>
+<body>
+    <main>
+        <h1>LocalDrop is stopping</h1>
+        <p>The server is shutting down. Other devices will no longer be able to access this page.</p>
+        <p>To start it again, run <code>python localdrop/server.py</code> on the computer.</p>
+    </main>
+</body>
+</html>"""
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        self.send_header("Connection", "close")
+        self.close_connection = True
         self.end_headers()
+        try:
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
+        # shutdown() must run outside the serve_forever() thread.
+        threading.Thread(
+            target=self.server.shutdown,
+            name="LocalDrop-shutdown",
+            daemon=True,
+        ).start()
 
     def serve_index(self) -> None:
         count, file_rows = build_file_rows()
@@ -222,7 +331,10 @@ class LocalDropHandler(BaseHTTPRequestHandler):
         page = (
             template.replace("{{COUNT}}", str(count))
             .replace("{{FILES}}", file_rows)
-            .replace("{{MESSAGE}}", safe_message)
+            .replace(
+                "{{MESSAGE}}",
+                f'<div class="message" role="status">{safe_message}</div>' if safe_message else "",
+            )
         )
         body = page.encode("utf-8")
         self.send_response(200)
@@ -277,7 +389,7 @@ def main() -> None:
     print(f"On this computer: http://localhost:{PORT}")
     print(f"On another device on the same Wi-Fi: http://<LAPTOP-IPv4>:{PORT}")
     print("Copy files into the shared folder to make them available.")
-    print("Press Ctrl+C to stop. Do not expose this server directly to the public internet.\n")
+    print("Press Ctrl+C or use the browser's Stop server button. Do not expose this server directly to the public internet.\n")
 
     try:
         server.serve_forever()
@@ -285,6 +397,7 @@ def main() -> None:
         print("\nStopping LocalDrop...")
     finally:
         server.server_close()
+        print("LocalDrop has stopped.")
 
 
 if __name__ == "__main__":
