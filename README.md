@@ -64,7 +64,8 @@ Local-Drop/
 ├── localdrop/
 │   ├── server.py
 │   └── templates/
-│       └── index.html
+│       ├── index.html
+│       └── login.html
 ├── .gitignore
 ├── LICENSE
 └── README.md
@@ -193,7 +194,8 @@ Local-Drop/
 └── localdrop/
     ├── server.py
     └── templates/
-        └── index.html
+        ├── index.html
+        └── login.html
 ```
 
 ## Contributing
