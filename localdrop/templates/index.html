@@ -494,6 +494,35 @@
         document.getElementById("cancel-shutdown").addEventListener("click", () => {
             shutdownDialog.close();
         });
+
+        // All authenticated browsers poll the shared folder's lightweight version
+        // token. Refresh only when another device changes its contents.
+        let lastFilesVersion = "{{FILES_VERSION}}";
+        let isReloadingForFileChange = false;
+
+        async function checkForFileChanges() {
+            if (isReloadingForFileChange) return;
+
+            try {
+                const response = await fetch("/api/state", { cache: "no-store" });
+                if (!response.ok) return;
+
+                const currentVersion = (await response.text()).trim();
+                if (!currentVersion) return;
+
+                if (lastFilesVersion && currentVersion !== lastFilesVersion) {
+                    isReloadingForFileChange = true;
+                    window.location.reload();
+                    return;
+                }
+
+                lastFilesVersion = currentVersion;
+            } catch {
+                // The server may be stopping or the network may be temporarily unavailable.
+            }
+        }
+
+        window.setInterval(checkForFileChanges, 2000);
     </script>
 </body>
 </html>
