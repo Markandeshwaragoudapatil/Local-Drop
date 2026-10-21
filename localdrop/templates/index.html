@@ -205,6 +205,36 @@
 
         .inline-form { display: inline; margin: 0; }
 
+        .shutdown-dialog {
+            width: min(420px, calc(100% - 32px));
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            padding: 22px;
+            color: var(--ink);
+            box-shadow: 0 20px 60px #10291d33;
+        }
+
+        .shutdown-dialog::backdrop { background: #10291d80; }
+        .shutdown-dialog h3 { margin: 0 0 8px; }
+        .shutdown-dialog p { color: var(--muted); margin: 0 0 16px; }
+        .shutdown-dialog label { display: block; margin-bottom: 6px; font-weight: 650; }
+
+        .shutdown-dialog input[name="pin"] {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            font: inherit;
+            letter-spacing: 0.35em;
+        }
+
+        .dialog-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+            margin-top: 18px;
+        }
+
         .server-controls {
             display: flex;
             justify-content: flex-end;
@@ -370,15 +400,32 @@
             <div id="files">{{FILES}}</div>
 
             <div class="server-controls">
-                <form
-                    action="/shutdown"
-                    method="post"
-                    onsubmit="return confirm('Stop LocalDrop now? This disconnects every phone and computer using it.');"
-                >
-                    <input type="hidden" name="confirm" value="yes">
-                    <button class="btn stop" type="submit">Stop server</button>
-                </form>
+                <button class="btn stop" id="open-shutdown-dialog" type="button">Stop server</button>
             </div>
+
+            <dialog id="shutdown-dialog" class="shutdown-dialog">
+                <form action="/shutdown" method="post">
+                    <h3>Stop LocalDrop?</h3>
+                    <p>Enter the current PIN to stop the server for every connected device.</p>
+                    <input type="hidden" name="confirm" value="yes">
+                    <label for="shutdown-pin">4-digit PIN</label>
+                    <input
+                        id="shutdown-pin"
+                        name="pin"
+                        type="password"
+                        inputmode="numeric"
+                        pattern="[0-9]{4}"
+                        minlength="4"
+                        maxlength="4"
+                        autocomplete="off"
+                        required
+                    >
+                    <div class="dialog-actions">
+                        <button class="btn" id="cancel-shutdown" type="button">Cancel</button>
+                        <button class="btn stop" type="submit">Confirm stop</button>
+                    </div>
+                </form>
+            </dialog>
         </section>
 
         <div class="hint">
@@ -407,6 +454,15 @@
         if (window.location.search) {
             window.history.replaceState(null, "", window.location.pathname);
         }
+
+        const shutdownDialog = document.getElementById("shutdown-dialog");
+        document.getElementById("open-shutdown-dialog").addEventListener("click", () => {
+            document.getElementById("shutdown-pin").value = "";
+            shutdownDialog.showModal();
+        });
+        document.getElementById("cancel-shutdown").addEventListener("click", () => {
+            shutdownDialog.close();
+        });
     </script>
 </body>
 </html>
