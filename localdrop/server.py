@@ -6,7 +6,10 @@ import html
 import mimetypes
 import os
 import re
+import secrets
 import threading
+import time
+from http.cookies import CookieError, SimpleCookie
 from email import policy
 from email.parser import BytesParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -25,12 +28,100 @@ SHARE_DIR = Path(
 TEMPLATE_PATH = Path(__file__).parent / "templates" / "index.html"
 MAX_UPLOAD_BYTES = 100 * 1024 * 1024  # 100 MiB per request
 
+# PIN/session state is held in memory and resets whenever LocalDrop restarts.
+SERVER_PIN = f"{secrets.randbelow(10_000):04d}"
+SESSION_TTL_SECONDS = 12 * 60 * 60
+SESSIONS: dict[str, float] = {}
+SESSION_LOCK = threading.Lock()
+
+# Five incorrect PIN attempts from one client IP trigger a 60-second cooldown.
+MAX_PIN_FAILURES = 5
+PIN_COOLDOWN_SECONDS = 60
+PIN_FAILURES: dict[str, tuple[int, float]] = {}
+PIN_FAILURES_LOCK = threading.Lock()
+
+LOGIN_TEMPLATE_PATH = Path(__file__).parent / "templates" / "login.html"
+
 # Only these types may be previewed inline. Other types download as attachments.
 PREVIEW_TYPES = {
     ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp",
     ".pdf", ".txt", ".md", ".csv", ".log",
     ".mp4", ".webm", ".ogg", ".mp3", ".wav", ".opus",
 }
+
+
+def create_session() -> str:
+    """Create a random in-memory session token with a limited lifetime."""
+    token = secrets.token_urlsafe(32)
+    now = time.monotonic()
+    with SESSION_LOCK:
+        for expired_token, expiry in list(SESSIONS.items()):
+            if expiry <= now:
+                SESSIONS.pop(expired_token, None)
+        SESSIONS[token] = now + SESSION_TTL_SECONDS
+    return token
+
+
+def is_valid_session(token: str) -> bool:
+    """Check a session token and discard it if expired."""
+    if not token:
+        return False
+    now = time.monotonic()
+    with SESSION_LOCK:
+        expires_at = SESSIONS.get(token)
+        if expires_at is None:
+            return False
+        if expires_at <= now:
+            SESSIONS.pop(token, None)
+            return False
+        return True
+
+
+def get_session_token(cookie_header: str) -> str:
+    """Extract the LocalDrop session cookie safely."""
+    cookie = SimpleCookie()
+    try:
+        cookie.load(cookie_header)
+    except CookieError:
+        return ""
+    morsel = cookie.get("localdrop_session")
+    return morsel.value if morsel else ""
+
+
+def pin_cooldown_remaining(client_ip: str) -> int:
+    """Return remaining PIN lockout seconds for a client IP, if any."""
+    now = time.monotonic()
+    with PIN_FAILURES_LOCK:
+        record = PIN_FAILURES.get(client_ip)
+        if record is None:
+            return 0
+        failures, blocked_until = record
+        if blocked_until > now:
+            return max(1, int(blocked_until - now + 0.999))
+        if blocked_until:
+            PIN_FAILURES.pop(client_ip, None)
+        return 0
+
+
+def record_pin_failure(client_ip: str) -> int:
+    """Record a wrong PIN and start a cooldown after too many failures."""
+    now = time.monotonic()
+    with PIN_FAILURES_LOCK:
+        failures, blocked_until = PIN_FAILURES.get(client_ip, (0, 0.0))
+        if blocked_until > now:
+            return max(1, int(blocked_until - now + 0.999))
+        failures += 1
+        if failures >= MAX_PIN_FAILURES:
+            PIN_FAILURES[client_ip] = (failures, now + PIN_COOLDOWN_SECONDS)
+            return PIN_COOLDOWN_SECONDS
+        PIN_FAILURES[client_ip] = (failures, 0.0)
+        return 0
+
+
+def clear_pin_failures(client_ip: str) -> None:
+    """Clear a client's failed-attempt counter after a correct PIN."""
+    with PIN_FAILURES_LOCK:
+        PIN_FAILURES.pop(client_ip, None)
 
 
 def human_size(size: int) -> str:
@@ -146,7 +237,16 @@ class LocalDropHandler(BaseHTTPRequestHandler):
 
     server_version = "LocalDrop/1.2"
 
+    def is_authenticated(self) -> bool:
+        """Only a current server-side session grants access to LocalDrop."""
+        token = get_session_token(self.headers.get("Cookie", ""))
+        return is_valid_session(token)
+
     def do_GET(self) -> None:
+        if not self.is_authenticated():
+            self.serve_login()
+            return
+
         parsed = urlparse(self.path)
         query = parse_qs(parsed.query)
 
@@ -159,6 +259,22 @@ class LocalDropHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
+
+        # The login route is the only POST route open without an existing session.
+        if parsed.path == "/login":
+            self.handle_login()
+            return
+
+        if not self.is_authenticated():
+            # Close the connection rather than leave an upload body unread.
+            self.send_response(303)
+            self.send_header("Location", "/")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Connection", "close")
+            self.close_connection = True
+            self.end_headers()
+            return
+
         if parsed.path == "/upload":
             self.handle_upload()
         elif parsed.path == "/delete":
@@ -167,6 +283,65 @@ class LocalDropHandler(BaseHTTPRequestHandler):
             self.handle_shutdown()
         else:
             self.send_error(404, "Not found")
+
+    def serve_login(self, message: str = "") -> None:
+        """Show only the PIN screen to browsers without an active session."""
+        try:
+            template = LOGIN_TEMPLATE_PATH.read_text(encoding="utf-8")
+        except OSError:
+            self.send_error(500, "The LocalDrop login page could not be read.")
+            return
+
+        safe_message = html.escape(message)
+        message_html = (
+            f'<div class="message" role="alert">{safe_message}</div>'
+            if safe_message
+            else ""
+        )
+        body = template.replace("{{MESSAGE}}", message_html).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def handle_login(self) -> None:
+        """Validate the startup PIN and create a session cookie."""
+        # Read the bounded form first so even a rate-limited request's body is consumed.
+        form = self.read_form_body(max_bytes=4096)
+        if form is None:
+            return
+
+        client_ip = self.client_address[0]
+        remaining = pin_cooldown_remaining(client_ip)
+        if remaining:
+            self.serve_login(
+                f"Too many incorrect attempts. Wait {remaining} seconds and try again."
+            )
+            return
+
+        supplied_pin = form.get("pin", [""])[0]
+        if not secrets.compare_digest(supplied_pin, SERVER_PIN):
+            remaining = record_pin_failure(client_ip)
+            if remaining:
+                message = f"Too many incorrect attempts. Try again in {remaining} seconds."
+            else:
+                message = "Incorrect PIN. Please try again."
+            self.serve_login(message)
+            return
+
+        clear_pin_failures(client_ip)
+        token = create_session()
+        self.send_response(303)
+        self.send_header("Location", "/")
+        self.send_header(
+            "Set-Cookie",
+            f"localdrop_session={token}; Path=/; Max-Age={SESSION_TTL_SECONDS}; HttpOnly; SameSite=Strict",
+        )
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
 
     def read_form_body(self, max_bytes: int = 16 * 1024) -> dict[str, list[str]] | None:
         """Read a bounded URL-encoded form body."""
@@ -271,7 +446,7 @@ class LocalDropHandler(BaseHTTPRequestHandler):
         self.redirect_with_message(f"Deleted {file_path.name}.")
 
     def handle_shutdown(self) -> None:
-        """Redirect the browser home, then stop the server after a short delay."""
+        """Require the startup PIN again before stopping the server."""
         form = self.read_form_body()
         if form is None:
             return
@@ -279,7 +454,26 @@ class LocalDropHandler(BaseHTTPRequestHandler):
             self.send_error(400, "Shutdown was not confirmed")
             return
 
-        # Use Post/Redirect/Get so refreshing the browser never repeats shutdown.
+        client_ip = self.client_address[0]
+        remaining = pin_cooldown_remaining(client_ip)
+        if remaining:
+            self.redirect_with_message(
+                f"Too many incorrect PIN attempts. Try again in {remaining} seconds."
+            )
+            return
+
+        supplied_pin = form.get("pin", [""])[0]
+        if not secrets.compare_digest(supplied_pin, SERVER_PIN):
+            remaining = record_pin_failure(client_ip)
+            if remaining:
+                message = f"Incorrect PIN. Shutdown blocked for {remaining} seconds."
+            else:
+                message = "Incorrect PIN. The server is still running."
+            self.redirect_with_message(message)
+            return
+
+        clear_pin_failures(client_ip)
+        # Redirect first so a refresh cannot repeat the shutdown POST.
         self.redirect_with_message(
             "LocalDrop is stopping. This device will disconnect shortly."
         )
@@ -356,9 +550,11 @@ def main() -> None:
     server = ThreadingHTTPServer((HOST, PORT), LocalDropHandler)
 
     print("\nLocalDrop is running")
+    print(f"Access PIN: {SERVER_PIN}")
+    print("Enter this PIN in a browser to open LocalDrop. It changes on every restart.")
     print(f"Shared folder: {SHARE_DIR}")
     print(f"On this computer: http://localhost:{PORT}")
-    print(f"On another device on the same Wi-Fi: http://<LAPTOP-IPv4>:{PORT}")
+    print(f"On another device on the same local network or hotspot: http://<LAPTOP-IPv4>:{PORT}")
     print("Copy files into the shared folder to make them available.")
     print("Press Ctrl+C or use the browser's Stop server button. Do not expose this server directly to the public internet.\n")
 
