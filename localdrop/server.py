@@ -321,19 +321,22 @@ def save_uploaded_file(filename: str, data: bytes) -> Path:
         destination = unique_destination(filename)
         try:
             # Exclusive creation closes the race between checking and writing the name.
-            with destination.open("xb") as file_handle:
-                file_handle.write(data)
-            return destination
+            file_handle = destination.open("xb")
         except FileExistsError:
             # Another request claimed this name after unique_destination checked it.
             continue
+
+        try:
+            with file_handle:
+                file_handle.write(data)
         except OSError:
-            # Remove a partial file if writing failed after exclusive creation succeeded.
+            # The exclusive open succeeded, so this is a partial file created by us.
             try:
                 destination.unlink(missing_ok=True)
             except OSError:
                 pass
             raise
+        return destination
 
 
 def parse_uploaded_files(content_type: str, body: bytes) -> list[tuple[str, bytes]]:
