@@ -401,6 +401,12 @@
                 file.hidden = !file.dataset.name.includes(query);
             });
         });
+
+        // Status messages are already rendered in the page. Remove their query
+        // parameter so refreshing only performs a normal GET of the home page.
+        if (window.location.search) {
+            window.history.replaceState(null, "", window.location.pathname);
+        }
     </script>
 </body>
 </html>
