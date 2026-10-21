@@ -24,6 +24,12 @@ class QuietHandler(localdrop_server.LocalDropHandler):
         pass
 
 
+class TestThreadingHTTPServer(ThreadingHTTPServer):
+    """Allow enough queued connections for the concurrent-client test."""
+
+    request_queue_size = 32
+
+
 class LocalDropHTTPTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
@@ -43,7 +49,7 @@ class LocalDropHTTPTests(unittest.TestCase):
         localdrop_server.SESSIONS.clear()
         localdrop_server.PIN_FAILURES.clear()
 
-        self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), QuietHandler)
+        self.httpd = TestThreadingHTTPServer(("127.0.0.1", 0), QuietHandler)
         self.httpd.daemon_threads = True
         self.base_url = f"http://127.0.0.1:{self.httpd.server_address[1]}"
         self.server_thread = threading.Thread(
@@ -171,8 +177,18 @@ class LocalDropHTTPTests(unittest.TestCase):
             cookie for cookie in jar if cookie.name == "localdrop_session"
         )
         self.assertTrue(session_cookie.value)
-        self.assertTrue(session_cookie.has_nonstandard_attr("HttpOnly"))
-        self.assertEqual(session_cookie.get_nonstandard_attr("SameSite"), "Strict")
+        self.assertTrue(
+            any(session_cookie.has_nonstandard_attr(name) for name in ("HttpOnly", "httponly"))
+        )
+        same_site = next(
+            (
+                session_cookie.get_nonstandard_attr(name)
+                for name in ("SameSite", "samesite")
+                if session_cookie.has_nonstandard_attr(name)
+            ),
+            None,
+        )
+        self.assertEqual(same_site, "Strict")
 
     def test_repeated_wrong_pin_attempts_trigger_cooldown(self) -> None:
         for _ in range(localdrop_server.MAX_PIN_FAILURES):
