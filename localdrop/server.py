@@ -154,8 +154,60 @@ def build_file_rows() -> tuple[int, str]:
     )
     rows: list[str] = []
 
-    image_types = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"}
-    document_types = {".pdf", ".txt", ".md", ".csv"}
+    image_types = {
+        ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg", ".heic", ".avif",
+    }
+    video_types = {
+        ".mp4", ".webm", ".mov", ".m4v", ".avi", ".mkv", ".mpeg", ".mpg", ".3gp",
+    }
+    audio_types = {
+        ".mp3", ".wav", ".ogg", ".opus", ".m4a", ".aac", ".flac", ".wma",
+    }
+
+    # Simple inline SVGs stay sharp on high-resolution screens and need no image assets.
+    icon_svgs = {
+        "image": (
+            '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" '
+            'stroke="currentColor" stroke-width="1.8" stroke-linecap="round" '
+            'stroke-linejoin="round" aria-hidden="true">'
+            '<rect x="3" y="4" width="18" height="16" rx="2"/>'
+            '<circle cx="8.5" cy="9" r="1.5"/>'
+            '<path d="m4 17 5-5 4 4 3-3 4 4"/></svg>'
+        ),
+        "pdf": (
+            '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" '
+            'stroke="currentColor" stroke-width="1.8" stroke-linecap="round" '
+            'stroke-linejoin="round" aria-hidden="true">'
+            '<path d="M6 2.8h8l4 4V21H6z"/>'
+            '<path d="M14 3v5h5"/>'
+            '<path d="M8 12h8M8 15h3"/>'
+            '<text x="8" y="19" font-size="4.5" font-weight="800" fill="currentColor" '
+            'stroke="none">PDF</text></svg>'
+        ),
+        "video": (
+            '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" '
+            'stroke="currentColor" stroke-width="1.8" stroke-linecap="round" '
+            'stroke-linejoin="round" aria-hidden="true">'
+            '<rect x="2.8" y="5" width="18.4" height="14" rx="2.5"/>'
+            '<path d="m10 9 5 3-5 3z" fill="currentColor" stroke="none"/></svg>'
+        ),
+        "audio": (
+            '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" '
+            'stroke="currentColor" stroke-width="1.8" stroke-linecap="round" '
+            'stroke-linejoin="round" aria-hidden="true">'
+            '<path d="M9 18V5l11-2v13"/>'
+            '<circle cx="6" cy="18" r="3"/>'
+            '<circle cx="17" cy="16" r="3"/>'
+            '<path d="M9 8l11-2"/></svg>'
+        ),
+        "file": (
+            '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" '
+            'stroke="currentColor" stroke-width="1.8" stroke-linecap="round" '
+            'stroke-linejoin="round" aria-hidden="true">'
+            '<path d="M6 2.8h8l4 4V21H6z"/>'
+            '<path d="M14 3v5h5M9 12h6M9 16h6"/></svg>'
+        ),
+    }
 
     for path in files:
         relative = path.relative_to(SHARE_DIR).as_posix()
@@ -163,11 +215,23 @@ def build_file_rows() -> tuple[int, str]:
         search_name = html.escape(relative.lower(), quote=True)
         encoded_path = quote(relative, safe="")
         suffix = path.suffix.lower()
-        icon = "🖼️" if suffix in image_types else ("📄" if suffix in document_types else "📦")
+
+        if suffix in image_types:
+            icon_type = "image"
+        elif suffix == ".pdf":
+            icon_type = "pdf"
+        elif suffix in video_types:
+            icon_type = "video"
+        elif suffix in audio_types:
+            icon_type = "audio"
+        else:
+            icon_type = "file"
+
+        icon_svg = icon_svgs[icon_type]
 
         rows.append(
             f'<article class="file" data-name="{search_name}">'
-            f'<div class="fileicon" aria-hidden="true">{icon}</div>'
+            f'<div class="fileicon fileicon-{icon_type}" aria-hidden="true">{icon_svg}</div>'
             f'<div class="meta"><div class="name">{escaped_name}</div>'
             f'<div class="sub">{human_size(path.stat().st_size)}</div></div>'
             f'<div class="actions">'
