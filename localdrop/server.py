@@ -243,12 +243,14 @@ class LocalDropHandler(BaseHTTPRequestHandler):
         return is_valid_session(token)
 
     def do_GET(self) -> None:
-        if not self.is_authenticated():
-            self.serve_login()
-            return
-
         parsed = urlparse(self.path)
         query = parse_qs(parsed.query)
+
+        if not self.is_authenticated():
+            login_message = query.get("login_message", [""])[0]
+            self.serve_login(login_message)
+            return
+
 
         if parsed.path in ("/", "/index.html"):
             self.serve_index()
@@ -307,6 +309,13 @@ class LocalDropHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def redirect_to_login(self, message: str) -> None:
+        """Use Post/Redirect/Get after a failed login to avoid form resubmission."""
+        self.send_response(303)
+        self.send_header("Location", "/?login_message=" + quote(message))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+
     def handle_login(self) -> None:
         """Validate the startup PIN and create a session cookie."""
         # Read the bounded form first so even a rate-limited request's body is consumed.
@@ -317,7 +326,7 @@ class LocalDropHandler(BaseHTTPRequestHandler):
         client_ip = self.client_address[0]
         remaining = pin_cooldown_remaining(client_ip)
         if remaining:
-            self.serve_login(
+            self.redirect_to_login(
                 f"Too many incorrect attempts. Wait {remaining} seconds and try again."
             )
             return
@@ -329,7 +338,7 @@ class LocalDropHandler(BaseHTTPRequestHandler):
                 message = f"Too many incorrect attempts. Try again in {remaining} seconds."
             else:
                 message = "Incorrect PIN. Please try again."
-            self.serve_login(message)
+            self.redirect_to_login(message)
             return
 
         clear_pin_failures(client_ip)
