@@ -14,14 +14,19 @@ See LocalDrop in action!
   <a href="screenshots/02-file-sharing.png">
     <img src="screenshots/02-file-sharing.png" width="30%" alt="LocalDrop file sharing interface">
   </a>
-  <a href="screenshots/03-mobile-view.png">
-    <img src="screenshots/03-mobile-view.png" width="30%" alt="LocalDrop on mobile">
-  </a>
 </p>
 
 <p align="center">
   <sub>🔐 Secure Login</sub> &nbsp; · &nbsp;
   <sub>📁 File Sharing</sub> &nbsp; · &nbsp;
+</p>
+
+<p align="center">
+  <a href="screenshots/03-mobile-view.png">
+    <img src="screenshots/03-mobile-view.png" width="30%" alt="LocalDrop on mobile">
+  </a>
+</p>
+<p align="center">
   <sub>📱 Mobile Access</sub>
 </p>
 
