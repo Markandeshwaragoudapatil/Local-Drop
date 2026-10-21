@@ -27,7 +27,8 @@ SHARE_DIR = Path(
 ).expanduser().resolve()
 
 TEMPLATE_PATH = Path(__file__).parent / "templates" / "index.html"
-MAX_UPLOAD_BYTES = 100 * 1024 * 1024 * 1024  # 100 GiB per request
+MAX_UPLOAD_BYTES = 100 * 1024 * 1024  # 100 MiB of uploaded file data per request
+MAX_MULTIPART_OVERHEAD_BYTES = 1024 * 1024  # Allow room for multipart headers and boundaries
 
 # PIN/session state is held in memory and resets whenever LocalDrop restarts.
 SERVER_PIN = f"{secrets.randbelow(10_000):04d}"
@@ -302,16 +303,37 @@ def unique_destination(filename: str) -> Path:
         name = "uploaded-file"
 
     destination = SHARE_DIR / name
-    if not destination.exists():
+    if not destination.exists() and not destination.is_symlink():
         return destination
 
     stem, suffix = Path(name).stem, Path(name).suffix
     counter = 1
     while True:
         candidate = SHARE_DIR / f"{stem} ({counter}){suffix}"
-        if not candidate.exists():
+        if not candidate.exists() and not candidate.is_symlink():
             return candidate
         counter += 1
+
+
+def save_uploaded_file(filename: str, data: bytes) -> Path:
+    """Save a file without overwriting an existing file, even during concurrent uploads."""
+    while True:
+        destination = unique_destination(filename)
+        try:
+            # Exclusive creation closes the race between checking and writing the name.
+            with destination.open("xb") as file_handle:
+                file_handle.write(data)
+            return destination
+        except FileExistsError:
+            # Another request claimed this name after unique_destination checked it.
+            continue
+        except OSError:
+            # Remove a partial file if writing failed after exclusive creation succeeded.
+            try:
+                destination.unlink(missing_ok=True)
+            except OSError:
+                pass
+            raise
 
 
 def parse_uploaded_files(content_type: str, body: bytes) -> list[tuple[str, bytes]]:
@@ -502,7 +524,7 @@ class LocalDropHandler(BaseHTTPRequestHandler):
         if length <= 0:
             self.send_error(400, "No upload data received")
             return
-        if length > MAX_UPLOAD_BYTES + 1024 * 1024:
+        if length > MAX_UPLOAD_BYTES + MAX_MULTIPART_OVERHEAD_BYTES:
             self.send_error(413, "Upload is too large. The limit is 100 MiB per request.")
             return
 
@@ -522,15 +544,18 @@ class LocalDropHandler(BaseHTTPRequestHandler):
             self.send_error(400, "Choose at least one file to upload")
             return
 
+        # The request may include multipart headers, but the actual file payloads
+        # together must not exceed the documented 100 MiB upload limit.
+        if sum(len(data) for _, data in uploads) > MAX_UPLOAD_BYTES:
+            self.send_error(413, "Uploaded file data exceeds 100 MiB per request.")
+            return
+
         saved_count = 0
         try:
             for filename, data in uploads:
                 if not filename:
                     continue
-                destination = unique_destination(filename)
-                # Write to the destination without replacing existing files.
-                with destination.open("xb") as file_handle:
-                    file_handle.write(data)
+                save_uploaded_file(filename, data)
                 saved_count += 1
         except OSError:
             self.send_error(500, "Could not save the uploaded file")
