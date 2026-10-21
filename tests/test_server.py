@@ -209,9 +209,10 @@ class LocalDropHTTPTests(unittest.TestCase):
         # Use a small test limit to verify the real byte-count check without allocating 100 MiB.
         localdrop_server.MAX_UPLOAD_BYTES = 32
         with self.assertRaises(urllib.error.HTTPError) as context:
-            self.upload([("too-large.bin", b"x" * 33)])
+            self.upload([("first.bin", b"x" * 20), ("second.bin", b"y" * 13)])
         self.assertEqual(context.exception.code, 413)
-        self.assertFalse((self.share_dir / "too-large.bin").exists())
+        self.assertFalse((self.share_dir / "first.bin").exists())
+        self.assertFalse((self.share_dir / "second.bin").exists())
 
     def test_upload_at_limit_is_accepted(self) -> None:
         self.login()
