@@ -1,6 +1,6 @@
 # LocalDrop
 
-LocalDrop is a small, dependency-free file-sharing website for your local network. Run it on your computer, open it from a phone or another computer on the same Wi-Fi, then preview or download files through a browser.
+LocalDrop is a small, dependency-free file-sharing website for your local network. Run it on your computer, connect your phone or another device to the same local network (through a Wi-Fi router or a mobile hotspot), then preview, upload, download, and manage files in a browser. LocalDrop does not require internet access or an active mobile-data plan; the devices only need local network connectivity.
 
 - No cloud upload: files are served directly from your computer.
 - No third-party Python packages required.
@@ -82,11 +82,13 @@ http://localhost:8000
 
 ### 5. Open LocalDrop on your phone
 
-1. Connect your computer and phone to the same Wi-Fi network.
+1. Connect your computer and phone to the same **local network**. You can connect both to the same Wi-Fi router, or turn on your phone's hotspot and connect your computer to it.
 2. Find your computer's local IPv4 address.
-   - **Windows:** run `ipconfig` in PowerShell and find `IPv4 Address` under the active Wi-Fi adapter.
+   - **Windows:** run `ipconfig` in PowerShell and find `IPv4 Address` under the active Wi-Fi adapter. Use the adapter that connects to the router or phone hotspot.
    - **macOS/Linux:** use your system's network settings or network-interface tools.
 3. On your phone, open `http://<COMPUTER-IP>:8000`, replacing `<COMPUTER-IP>` with your computer's actual IPv4 address.
+
+**Internet is not required.** In hotspot mode, the phone and computer can communicate locally even when the SIM has no active data package, as long as the hotspot allows connected devices to communicate with each other.
 
 For example:
 
@@ -98,9 +100,9 @@ The example IP is only illustrative; use the address assigned to your computer.
 
 If your phone cannot connect:
 
-- Confirm both devices are connected to the same Wi-Fi.
+- Confirm both devices are connected to the same local network. A phone hotspot is fine; an internet connection or active mobile-data plan is not required.
 - Make sure the server is still running.
-- Use the computer's active Wi-Fi IPv4 address, not `127.0.0.1` or an unrelated virtual-adapter address.
+- Use the computer's IPv4 address for the active network adapter connected to that local network, not `127.0.0.1` or an unrelated virtual-adapter address.
 - Check your firewall settings. Only allow incoming connections on a trusted private network if appropriate.
 - School, office, guest, and public Wi-Fi networks may block communication between connected devices through client isolation.
 
