@@ -9,21 +9,21 @@ See LocalDrop in action!
 
 <p align="center">
   <a href="screenshots/01-login.png">
-    <img src="screenshots/01-login.png" width="30%" alt="LocalDrop PIN login screen">
+    <img src="screenshots/01-login.png" width="50%" alt="LocalDrop PIN login screen">
   </a>
   <a href="screenshots/02-file-sharing.png">
-    <img src="screenshots/02-file-sharing.png" width="30%" alt="LocalDrop file sharing interface">
+    <img src="screenshots/02-file-sharing.png" width="50%" alt="LocalDrop file sharing interface">
   </a>
 </p>
 
 <p align="center">
   <sub>🔐 Secure Login</sub> &nbsp; · &nbsp;
-  <sub>📁 File Sharing</sub> &nbsp; · &nbsp;
+  <sub>📁 File Sharing</sub>
 </p>
 
 <p align="center">
   <a href="screenshots/03-mobile-view.png">
-    <img src="screenshots/03-mobile-view.png" width="30%" alt="LocalDrop on mobile">
+    <img src="screenshots/03-mobile-view.png" width="100%" alt="LocalDrop on mobile">
   </a>
 </p>
 <p align="center">
